@@ -12,7 +12,12 @@ export interface OAuthTokenResponse {
 // User-facing redirect bounce page hosted on asherman.io (GitHub Pages)
 export const USER_FACING_REDIRECT_URI = "https://asherman.io/drive-view/auth";
 
-// Background worker endpoints for auth redirect, token exchange, and token refresh
+// Direct Google OAuth endpoints (used when user supplies custom Client ID & Secret)
+export const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
+export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+export const FULL_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+
+// Background worker endpoints for default auth redirect (drive.file), token exchange, and token refresh
 export const WORKER_BASE_URL = "https://drive-view-auth.alexgshm.workers.dev";
 export const WORKER_LOGIN_URL = `${WORKER_BASE_URL}/login`;
 export const WORKER_TOKEN_URL = `${WORKER_BASE_URL}/token`;
@@ -55,9 +60,46 @@ export class GoogleOAuthManager {
   }
 
   /**
-   * Builds the worker login URL which holds the Client ID and 302-redirects directly to Google OAuth.
+   * Returns true if the user has enabled custom OAuth credentials.
+   * Throws if custom mode is enabled but Client ID or Client Secret is missing.
+   */
+  public usesCustomCredentials(): boolean {
+    const s = this.getSettings();
+    if (!s.useCustomCredentials) {
+      return false;
+    }
+    const clientId = (s.customClientId || "").trim();
+    const clientSecret = (s.customClientSecret || "").trim();
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        "Custom OAuth credentials enabled, but Client ID or Client Secret is empty. Please fill in both fields or disable Custom OAuth Credentials."
+      );
+    }
+    return true;
+  }
+
+  /**
+   * Builds the login URL:
+   * - By default, points to the Cloudflare Worker `/login` endpoint (requests `drive.file` scope).
+   * - When custom credentials are enabled, points directly to Google OAuth with full `drive` scope.
    */
   public buildLoginUrl(codeChallenge: string, state: string): string {
+    if (this.usesCustomCredentials()) {
+      const s = this.getSettings();
+      const params = new URLSearchParams({
+        client_id: s.customClientId.trim(),
+        redirect_uri: USER_FACING_REDIRECT_URI,
+        response_type: "code",
+        scope: FULL_DRIVE_SCOPE,
+        access_type: "offline",
+        prompt: "consent",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+        state,
+      });
+      return `${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`;
+    }
+
     const params = new URLSearchParams({
       challenge: codeChallenge,
       state,
@@ -159,27 +201,47 @@ export class GoogleOAuthManager {
   }
 
   /**
-   * Exchanges an authorization code for access + refresh tokens via the Cloudflare Worker relay.
-   * The worker holds the confidential Google Client Secret and makes the upstream call to Google.
+   * Exchanges an authorization code for access + refresh tokens:
+   * - Default: via the Cloudflare Worker relay.
+   * - Custom credentials: directly against Google's token endpoint.
    */
   public async exchangeCodeForTokens(
     rawCodeOrUrl: string,
     codeVerifier: string
   ): Promise<OAuthTokenResponse> {
     const code = GoogleOAuthManager.extractAuthCodeFromInput(rawCodeOrUrl);
+    const isCustom = this.usesCustomCredentials();
+    const s = this.getSettings();
 
-    const response = await requestUrl({
-      url: WORKER_TOKEN_URL,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        code,
-        code_verifier: codeVerifier,
-      }),
-      throw: false,
-    });
+    const response = isCustom
+      ? await requestUrl({
+          url: GOOGLE_TOKEN_ENDPOINT,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            client_id: s.customClientId.trim(),
+            client_secret: s.customClientSecret.trim(),
+            code,
+            code_verifier: codeVerifier,
+            grant_type: "authorization_code",
+            redirect_uri: USER_FACING_REDIRECT_URI,
+          }).toString(),
+          throw: false,
+        })
+      : await requestUrl({
+          url: WORKER_TOKEN_URL,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            code,
+            code_verifier: codeVerifier,
+          }),
+          throw: false,
+        });
 
     if (response.status >= 400) {
       throw new Error(`Token exchange failed (${response.status}): ${response.text}`);
@@ -198,7 +260,7 @@ export class GoogleOAuthManager {
   }
 
   /**
-   * Returns a valid access token, refreshing automatically via the relay if expired.
+   * Returns a valid access token, refreshing automatically if expired.
    */
   public async getValidAccessToken(): Promise<string> {
     const settings = this.getSettings();
@@ -220,22 +282,40 @@ export class GoogleOAuthManager {
   }
 
   private async refreshAccessToken(): Promise<string> {
-    const { refreshToken } = this.getSettings();
+    const s = this.getSettings();
+    const { refreshToken } = s;
     if (!refreshToken) {
       throw new Error("Missing Google OAuth Refresh Token.");
     }
 
-    const response = await requestUrl({
-      url: WORKER_REFRESH_URL,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      }),
-      throw: false,
-    });
+    const isCustom = this.usesCustomCredentials();
+
+    const response = isCustom
+      ? await requestUrl({
+          url: GOOGLE_TOKEN_ENDPOINT,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            client_id: s.customClientId.trim(),
+            client_secret: s.customClientSecret.trim(),
+            refresh_token: refreshToken,
+            grant_type: "refresh_token",
+          }).toString(),
+          throw: false,
+        })
+      : await requestUrl({
+          url: WORKER_REFRESH_URL,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+          }),
+          throw: false,
+        });
 
     if (response.status >= 400) {
       throw new Error(

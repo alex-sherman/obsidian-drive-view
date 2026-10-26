@@ -84,6 +84,47 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
       );
     }
 
+    new Setting(containerEl)
+      .setName("Use Custom OAuth Credentials (Full Drive & Shared Folders)")
+      .setDesc(
+        "By default, Drive View requests per-file access (drive.file) for folders created by this app. Enable this to provide your own Google Cloud Web Client ID & Secret for full Drive and shared folder access."
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.useCustomCredentials).onChange(async (val) => {
+          await this.plugin.updateSettings({ useCustomCredentials: val });
+          this.display();
+        })
+      );
+
+    if (this.plugin.settings.useCustomCredentials) {
+      new Setting(containerEl)
+        .setName("Custom Google OAuth Client ID")
+        .setDesc("Your Google Cloud OAuth 2.0 Web Application Client ID.")
+        .addText((text) =>
+          text
+            .setPlaceholder("123456789-abc...apps.googleusercontent.com")
+            .setValue(this.plugin.settings.customClientId)
+            .onChange(async (val) => {
+              await this.plugin.updateSettings({ customClientId: val.trim() });
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Custom Google OAuth Client Secret")
+        .setDesc(
+          "Your Web Client Secret. In Google Cloud Console, add https://asherman.io/drive-view/auth to Authorized redirect URIs."
+        )
+        .addText((text) => {
+          text.inputEl.type = "password";
+          text
+            .setPlaceholder("GOCSPX-...")
+            .setValue(this.plugin.settings.customClientSecret)
+            .onChange(async (val) => {
+              await this.plugin.updateSettings({ customClientSecret: val.trim() });
+            });
+        });
+    }
+
     // 2. Vault Root Folder Section
     containerEl.createEl("h3", { text: "2. Google Drive Vault Folder" });
 

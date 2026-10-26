@@ -52,6 +52,18 @@ export interface GoogleDriveSettings {
    * Whether to sync the `.obsidian` configuration and plugins directory with Google Drive
    */
   syncConfigDir: boolean;
+  /**
+   * Whether to use user-supplied Google OAuth Client ID and Secret (for full Drive & shared folder access)
+   */
+  useCustomCredentials: boolean;
+  /**
+   * User-supplied Google OAuth 2.0 Web Client ID
+   */
+  customClientId: string;
+  /**
+   * User-supplied Google OAuth 2.0 Web Client Secret
+   */
+  customClientSecret: string;
 }
 
 export const DEFAULT_SETTINGS: GoogleDriveSettings = {
@@ -66,6 +78,9 @@ export const DEFAULT_SETTINGS: GoogleDriveSettings = {
   prefetchBinaries: true,
   maxPrefetchBinarySizeMB: 25,
   syncConfigDir: false,
+  useCustomCredentials: false,
+  customClientId: "",
+  customClientSecret: "",
 };
 
 export interface VirtualEntry {

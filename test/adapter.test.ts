@@ -302,7 +302,7 @@ test("GoogleDriveDataAdapter virtual filesystem & Drive sync lifecycle", async (
   const rootListAfterConfig = await proxied.list("");
   expect(rootListAfterConfig.folders.includes(".obsidian")).toBe(false);
 
-  // 9. Test serverless relay OAuth URL generation
+  // 9. Test serverless relay OAuth URL generation (default mode)
   const oauth = new GoogleOAuthManager(
     () => settings,
     async () => {}
@@ -318,4 +318,24 @@ test("GoogleDriveDataAdapter virtual filesystem & Drive sync lifecycle", async (
   ).toBe(true);
   expect(launchedUrl.includes("challenge=")).toBe(true);
   expect(launchedUrl.includes("state=")).toBe(true);
+
+  // 10. Test custom OAuth credentials URL generation (full Drive scope)
+  settings.useCustomCredentials = true;
+  settings.customClientId = "custom-client-id.apps.googleusercontent.com";
+  settings.customClientSecret = "GOCSPX-custom-secret";
+
+  let customLaunchedUrl = "";
+  await oauth.startLoginFlow((url) => {
+    customLaunchedUrl = url;
+  });
+  expect(customLaunchedUrl.includes("https://accounts.google.com/o/oauth2/v2/auth")).toBe(true);
+  expect(
+    customLaunchedUrl.includes("client_id=custom-client-id.apps.googleusercontent.com")
+  ).toBe(true);
+  expect(
+    customLaunchedUrl.includes("redirect_uri=https%3A%2F%2Fasherman.io%2Fdrive-view%2Fauth")
+  ).toBe(true);
+  expect(
+    customLaunchedUrl.includes("scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive")
+  ).toBe(true);
 });
