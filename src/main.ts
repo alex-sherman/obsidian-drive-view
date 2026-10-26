@@ -183,6 +183,9 @@ export default class GoogleDriveVaultPlugin extends Plugin {
       this.setSyncState("syncing", "Syncing changes with Google Drive...");
       await this.driveAdapter.flushAllPendingUploads();
       const applied = await this.driveAdapter.pollRemoteChanges(this.settings.rootFolderId);
+      if (this.settings.syncConfigDir) {
+        await this.driveAdapter.reconcileConfigDirWithDrive();
+      }
       this.setSyncState(
         "synced",
         applied > 0 ? `Pulled ${applied} remote change(s)` : "Up to date"

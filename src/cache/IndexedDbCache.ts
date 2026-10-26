@@ -176,7 +176,13 @@ export class VirtualVaultCache {
       return undefined;
     }
     this.revokeBlobUrl(normalizedPath);
-    const mime = this.entries.get(normalizedPath)?.mimeType || guessMimeType(normalizedPath);
+    // Prefer the extension-derived type (Drive may report a generic MIME type), since consumers
+    // like react-inlinesvg validate that SVG blobs are served as `image/svg+xml`.
+    const guessed = guessMimeType(normalizedPath);
+    const mime =
+      guessed !== "application/octet-stream"
+        ? guessed
+        : this.entries.get(normalizedPath)?.mimeType || guessed;
     const blob = new Blob([buffer], { type: mime });
     const url = URL.createObjectURL(blob);
     this.blobUrls.set(normalizedPath, url);

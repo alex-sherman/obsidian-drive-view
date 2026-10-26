@@ -93,6 +93,18 @@ export class VaultMounter {
     const internalVault = this.app.vault as InternalVault;
     if (typeof internalVault.onChange !== "function") return;
 
+    const configDir = this.app.vault.configDir || ".obsidian";
+    if (evt.type === "renamed") {
+      if (
+        isConfigOrInternalPath(evt.newPath, configDir) ||
+        isConfigOrInternalPath(evt.oldPath, configDir)
+      ) {
+        return;
+      }
+    } else if (isConfigOrInternalPath(evt.path, configDir)) {
+      return;
+    }
+
     if (evt.type === "folder-created") {
       this.ensureParentFoldersInVault(evt.path, internalVault);
       if (!this.app.vault.getAbstractFileByPath(evt.path)) {
@@ -164,18 +176,18 @@ export class VaultMounter {
     const internalVault = this.app.vault as InternalVault;
     const configDir = this.app.vault.configDir || ".obsidian";
 
-    const entries = driveAdapter.cache.getAllEntries();
+    const entries = driveAdapter.cache
+      .getAllEntries()
+      .filter((e) => !isConfigOrInternalPath(e.path, configDir));
     const virtualPaths = new Set(entries.map((e) => e.path));
 
-    // 1. Remove any stale non-config files from Vault.fileMap that don't exist in virtual cache
+    // 1. Remove any stale files or accidentally-indexed config folders from Vault.fileMap
     if (internalVault.fileMap) {
-      const existingPaths = Object.keys(internalVault.fileMap).filter(
-        (p) => p !== "/" && !isConfigOrInternalPath(p, configDir)
-      );
+      const existingPaths = Object.keys(internalVault.fileMap).filter((p) => p !== "/");
       // Sort longest paths first so children are removed before parents
       existingPaths.sort((a, b) => b.length - a.length);
       for (const path of existingPaths) {
-        if (!virtualPaths.has(path)) {
+        if (!virtualPaths.has(path) || isConfigOrInternalPath(path, configDir)) {
           const item = internalVault.fileMap[path];
           const isFolder = item instanceof TFolder;
           internalVault.onChange?.(isFolder ? "folder-removed" : "file-removed", path);

@@ -3,6 +3,7 @@ import { VirtualVaultCache } from "../cache/IndexedDbCache";
 import { DriveClient, DRIVE_FOLDER_MIME } from "../drive/DriveClient";
 import { GoogleDriveSettings, SyncState, VirtualEntry } from "../types";
 import {
+  arrayBuffersEqual,
   arrayBufferToString,
   concatArrayBuffers,
   driveMarkdownToObsidian,
@@ -11,6 +12,7 @@ import {
   guessMimeType,
   isConfigOrInternalPath,
   isMarkdownFilePath,
+  isSyncableConfigPath,
   isTextFilePath,
   normalizeVaultPath,
   obsidianMarkdownToDrive,
@@ -73,6 +75,13 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   private shouldUseBaseAdapter(normalizedPath: string): boolean {
     return isConfigOrInternalPath(normalizedPath, this.configDir);
+  }
+
+  private shouldSyncConfigPath(normalizedPath: string): boolean {
+    return (
+      Boolean(this.getSettings().syncConfigDir) &&
+      isSyncableConfigPath(normalizedPath, this.configDir)
+    );
   }
 
   public getName(): string {
@@ -211,6 +220,9 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
     const toPrefetch = mergedEntries.filter((entry) => {
       if (entry.type !== "file" || entry.contentCached || !entry.driveId) return false;
+      if (this.shouldUseBaseAdapter(entry.path)) {
+        return this.shouldSyncConfigPath(entry.path);
+      }
       if (isTextFilePath(entry.path)) return true;
       if (settings.prefetchBinaries && entry.size > 0 && entry.size <= maxBinaryBytes) {
         return true;
@@ -242,6 +254,10 @@ export class GoogleDriveDataAdapter implements DataAdapter {
       });
 
       await Promise.all(workers);
+    }
+
+    if (settings.syncConfigDir) {
+      await this.reconcileConfigDirWithDrive();
     }
 
     try {
@@ -285,6 +301,9 @@ export class GoogleDriveDataAdapter implements DataAdapter {
       // Case 1: File or folder was removed or trashed
       if (change.removed || change.file?.trashed) {
         if (existing && !existing.dirty) {
+          if (this.shouldSyncConfigPath(existing.path)) {
+            await this.removeFromBaseAdapterIfExists(existing.path, existing.type === "folder");
+          }
           await this.removeEntryAndDescendantsFromCache(existing.path, true);
           appliedChanges++;
         }
@@ -308,6 +327,9 @@ export class GoogleDriveDataAdapter implements DataAdapter {
       // If parent is outside our vault root:
       if (parentPath === null) {
         if (existing && !existing.dirty) {
+          if (this.shouldSyncConfigPath(existing.path)) {
+            await this.removeFromBaseAdapterIfExists(existing.path, existing.type === "folder");
+          }
           await this.removeEntryAndDescendantsFromCache(existing.path, true);
           appliedChanges++;
         }
@@ -344,19 +366,35 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
         if (wasRenamed) {
           await this.renameInCacheAndNotify(oldPath, newPath);
+          if (this.shouldSyncConfigPath(oldPath) && this.shouldSyncConfigPath(newPath)) {
+            await this.renameOnBaseAdapterIfExists(oldPath, newPath);
+          }
         }
 
         await this.cache.setEntry(updatedEntry);
         driveIdMap.set(file.id, updatedEntry);
 
         if (!isFolder && contentChanged) {
-          await this.ensureFileContentCached(updatedEntry, true);
-          this.onVaultEvent?.({
-            type: "modified",
-            path: newPath,
-            stat: { ctime: updatedEntry.ctime, mtime: updatedEntry.mtime, size: updatedEntry.size },
-            remote: true,
-          });
+          const buf = await this.ensureFileContentCached(updatedEntry, true);
+          if (this.shouldSyncConfigPath(newPath)) {
+            await this.writeConfigFileToBaseAdapter(
+              newPath,
+              buf,
+              updatedEntry.mtime,
+              updatedEntry.ctime
+            );
+          } else {
+            this.onVaultEvent?.({
+              type: "modified",
+              path: newPath,
+              stat: {
+                ctime: updatedEntry.ctime,
+                mtime: updatedEntry.mtime,
+                size: updatedEntry.size,
+              },
+              remote: true,
+            });
+          }
         }
 
         appliedChanges++;
@@ -382,18 +420,27 @@ export class GoogleDriveDataAdapter implements DataAdapter {
         await this.cache.setEntry(newEntry);
         driveIdMap.set(file.id, newEntry);
 
-        if (!isFolder && isTextFilePath(newPath)) {
-          await this.ensureFileContentCached(newEntry, true);
-        }
+        if (this.shouldSyncConfigPath(newPath)) {
+          if (isFolder) {
+            await this.ensureBaseAdapterFolderExists(newPath);
+          } else {
+            const buf = await this.ensureFileContentCached(newEntry, true);
+            await this.writeConfigFileToBaseAdapter(newPath, buf, newEntry.mtime, newEntry.ctime);
+          }
+        } else if (!this.shouldUseBaseAdapter(newPath)) {
+          if (!isFolder && isTextFilePath(newPath)) {
+            await this.ensureFileContentCached(newEntry, true);
+          }
 
-        if (isFolder) {
-          this.onVaultEvent?.({ type: "folder-created", path: newPath });
-        } else {
-          this.onVaultEvent?.({
-            type: "file-created",
-            path: newPath,
-            stat: { ctime: newEntry.ctime, mtime: newEntry.mtime, size: newEntry.size },
-          });
+          if (isFolder) {
+            this.onVaultEvent?.({ type: "folder-created", path: newPath });
+          } else {
+            this.onVaultEvent?.({
+              type: "file-created",
+              path: newPath,
+              stat: { ctime: newEntry.ctime, mtime: newEntry.mtime, size: newEntry.size },
+            });
+          }
         }
         appliedChanges++;
       }
@@ -492,6 +539,7 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     const folders: string[] = [];
 
     for (const entry of this.cache.getAllEntries()) {
+      if (this.shouldUseBaseAdapter(entry.path)) continue;
       if (getParentPath(entry.path) === clean) {
         if (entry.type === "folder") {
           folders.push(entry.path);
@@ -560,7 +608,15 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     options?: DataWriteOptions
   ): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.write(normalizedPath, data, options);
+      await this.baseAdapter.write(normalizedPath, data, options);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.mirrorLocalConfigWriteToDrive(
+          normalizedPath,
+          stringToArrayBuffer(data),
+          options
+        );
+      }
+      return;
     }
 
     const buffer = stringToArrayBuffer(data);
@@ -573,7 +629,11 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     options?: DataWriteOptions
   ): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.writeBinary(normalizedPath, data, options);
+      await this.baseAdapter.writeBinary(normalizedPath, data, options);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.mirrorLocalConfigWriteToDrive(normalizedPath, data, options);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -628,7 +688,12 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     options?: DataWriteOptions
   ): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.append(normalizedPath, data, options);
+      await this.baseAdapter.append(normalizedPath, data, options);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        const updatedBuf = await this.baseAdapter.readBinary(normalizedPath);
+        await this.mirrorLocalConfigWriteToDrive(normalizedPath, updatedBuf, options);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -643,7 +708,12 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     options?: DataWriteOptions
   ): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.appendBinary(normalizedPath, data, options);
+      await this.baseAdapter.appendBinary(normalizedPath, data, options);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        const updatedBuf = await this.baseAdapter.readBinary(normalizedPath);
+        await this.mirrorLocalConfigWriteToDrive(normalizedPath, updatedBuf, options);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -658,7 +728,15 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     options?: DataWriteOptions
   ): Promise<string> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.process(normalizedPath, fn, options);
+      const updated = await this.baseAdapter.process(normalizedPath, fn, options);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.mirrorLocalConfigWriteToDrive(
+          normalizedPath,
+          stringToArrayBuffer(updated),
+          options
+        );
+      }
+      return updated;
     }
 
     const current = await this.read(normalizedPath);
@@ -675,12 +753,29 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     const clean = normalizeVaultPath(normalizedPath);
     const blobUrl = this.cache.getBlobUrl(clean);
     if (blobUrl) {
-      return blobUrl;
+      // Append an empty fragment so plugins that cache-bust with `${src}?t=${mtime}` (e.g. Ink)
+      // put the query inside the fragment. Blob URLs with a query string fail to resolve,
+      // but fragments are ignored during blob URL resolution.
+      return `${blobUrl}#`;
     }
 
     const entry = this.cache.getEntry(clean);
     if (entry && entry.type === "file" && entry.driveId) {
-      void this.ensureFileContentCached(entry);
+      // Content isn't cached yet: download it, then fire a "modified" event so embeds
+      // re-request the resource path and pick up the new blob URL.
+      void this.ensureFileContentCached(entry)
+        .then(() => {
+          const latest = this.cache.getEntry(clean);
+          if (!latest) return;
+          this.onVaultEvent?.({
+            type: "modified",
+            path: clean,
+            stat: { ctime: latest.ctime, mtime: latest.mtime, size: latest.size },
+          });
+        })
+        .catch((err) => {
+          console.warn(`[GoogleDriveDataAdapter] Failed to fetch resource ${clean}:`, err);
+        });
     }
 
     return this.baseAdapter.getResourcePath(normalizedPath);
@@ -688,7 +783,20 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   public async mkdir(normalizedPath: string): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.mkdir(normalizedPath);
+      await this.baseAdapter.mkdir(normalizedPath);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        const cleanConfigFolder = normalizeVaultPath(normalizedPath);
+        await this.ensureLocalFolderChain(cleanConfigFolder);
+        if (this.isDriveReady()) {
+          void this.ensureDriveFolderChain(cleanConfigFolder).catch((err) => {
+            console.warn(
+              `[GoogleDriveDataAdapter] Background mkdir failed for ${cleanConfigFolder}:`,
+              err
+            );
+          });
+        }
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -705,7 +813,11 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   public async trashSystem(normalizedPath: string): Promise<boolean> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.trashSystem(normalizedPath);
+      const res = await this.baseAdapter.trashSystem(normalizedPath);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.removeSyncedConfigFromDrive(normalizedPath, true);
+      }
+      return res;
     }
 
     await this.remove(normalizedPath, true);
@@ -714,7 +826,11 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   public async trashLocal(normalizedPath: string): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.trashLocal(normalizedPath);
+      await this.baseAdapter.trashLocal(normalizedPath);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.removeSyncedConfigFromDrive(normalizedPath, true);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -737,7 +853,11 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   public async rmdir(normalizedPath: string, recursive: boolean): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.rmdir(normalizedPath, recursive);
+      await this.baseAdapter.rmdir(normalizedPath, recursive);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.removeSyncedConfigFromDrive(normalizedPath, true);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -757,7 +877,11 @@ export class GoogleDriveDataAdapter implements DataAdapter {
 
   public async remove(normalizedPath: string, useTrash = true): Promise<void> {
     if (this.shouldUseBaseAdapter(normalizedPath)) {
-      return this.baseAdapter.remove(normalizedPath);
+      await this.baseAdapter.remove(normalizedPath);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.removeSyncedConfigFromDrive(normalizedPath, useTrash);
+      }
+      return;
     }
 
     const clean = normalizeVaultPath(normalizedPath);
@@ -787,7 +911,21 @@ export class GoogleDriveDataAdapter implements DataAdapter {
       this.shouldUseBaseAdapter(normalizedPath) ||
       this.shouldUseBaseAdapter(normalizedNewPath)
     ) {
-      return this.baseAdapter.rename(normalizedPath, normalizedNewPath);
+      await this.baseAdapter.rename(normalizedPath, normalizedNewPath);
+      if (this.shouldSyncConfigPath(normalizedPath)) {
+        await this.removeSyncedConfigFromDrive(normalizedPath, true);
+      }
+      if (this.shouldSyncConfigPath(normalizedNewPath)) {
+        const stat = await this.baseAdapter.stat(normalizedNewPath);
+        if (stat?.type === "file") {
+          const buf = await this.baseAdapter.readBinary(normalizedNewPath);
+          await this.mirrorLocalConfigWriteToDrive(normalizedNewPath, buf, {
+            ctime: stat.ctime,
+            mtime: stat.mtime,
+          });
+        }
+      }
+      return;
     }
 
     const oldClean = normalizeVaultPath(normalizedPath);
@@ -840,7 +978,12 @@ export class GoogleDriveDataAdapter implements DataAdapter {
       this.shouldUseBaseAdapter(normalizedPath) ||
       this.shouldUseBaseAdapter(normalizedNewPath)
     ) {
-      return this.baseAdapter.copy(normalizedPath, normalizedNewPath);
+      await this.baseAdapter.copy(normalizedPath, normalizedNewPath);
+      if (this.shouldSyncConfigPath(normalizedNewPath)) {
+        const buf = await this.baseAdapter.readBinary(normalizedNewPath);
+        await this.mirrorLocalConfigWriteToDrive(normalizedNewPath, buf);
+      }
+      return;
     }
 
     const srcClean = normalizeVaultPath(normalizedPath);
@@ -1096,6 +1239,284 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     this.activeUploads = Math.max(0, this.activeUploads - 1);
     if (this.activeUploads === 0 && this.writeTimers.size === 0) {
       this.onSyncStateChange?.("synced", "All changes saved to Google Drive");
+    }
+  }
+
+  // ============================================================================
+  // `.obsidian` Configuration & Plugin Directory Two-Way Sync
+  // ============================================================================
+
+  /**
+   * Reconciles the local `.obsidian` directory (`baseAdapter`) with the remote `.obsidian`
+   * directory on Google Drive (`this.cache`) when `syncConfigDir` is enabled.
+   */
+  public async reconcileConfigDirWithDrive(): Promise<{ pulled: number; pushed: number }> {
+    if (!this.getSettings().syncConfigDir || !this.isDriveReady()) {
+      return { pulled: 0, pushed: 0 };
+    }
+
+    let pulled = 0;
+    let pushed = 0;
+
+    const localScan = await this.scanLocalConfigDir(this.configDir);
+    const remoteConfigEntries = this.cache
+      .getAllEntries()
+      .filter((e) => this.shouldSyncConfigPath(e.path));
+    const remoteMap = new Map(remoteConfigEntries.map((e) => [e.path, e]));
+
+    // 1. Ensure remote folders exist locally
+    const remoteFolders = remoteConfigEntries
+      .filter((e) => e.type === "folder")
+      .sort((a, b) => a.path.length - b.path.length);
+    for (const folder of remoteFolders) {
+      if (!localScan.folders.has(folder.path)) {
+        await this.ensureBaseAdapterFolderExists(folder.path);
+      }
+    }
+
+    // 2. Reconcile remote config files against local `.obsidian` files
+    for (const remoteEntry of remoteConfigEntries) {
+      if (remoteEntry.type !== "file" || !remoteEntry.driveId) continue;
+
+      const localStat = localScan.files.get(remoteEntry.path);
+      const remoteBuf = await this.ensureFileContentCached(remoteEntry);
+
+      if (!localStat) {
+        await this.writeConfigFileToBaseAdapter(
+          remoteEntry.path,
+          remoteBuf,
+          remoteEntry.mtime,
+          remoteEntry.ctime
+        );
+        pulled++;
+      } else {
+        const localBuf = await this.baseAdapter.readBinary(remoteEntry.path);
+        if (arrayBuffersEqual(localBuf, remoteBuf)) {
+          continue;
+        }
+        if (remoteEntry.mtime > localStat.mtime) {
+          await this.writeConfigFileToBaseAdapter(
+            remoteEntry.path,
+            remoteBuf,
+            remoteEntry.mtime,
+            remoteEntry.ctime
+          );
+          pulled++;
+        } else {
+          await this.mirrorLocalConfigWriteToDrive(remoteEntry.path, localBuf, {
+            ctime: localStat.ctime,
+            mtime: localStat.mtime,
+          });
+          pushed++;
+        }
+      }
+    }
+
+    // 3. Push any local `.obsidian` files that don't exist on Google Drive yet
+    for (const [localPath, localStat] of localScan.files.entries()) {
+      if (!remoteMap.has(localPath)) {
+        const localBuf = await this.baseAdapter.readBinary(localPath);
+        await this.mirrorLocalConfigWriteToDrive(localPath, localBuf, {
+          ctime: localStat.ctime,
+          mtime: localStat.mtime,
+        });
+        pushed++;
+      }
+    }
+
+    if (pushed > 0) {
+      await this.flushAllPendingUploads();
+    }
+
+    return { pulled, pushed };
+  }
+
+  private async scanLocalConfigDir(
+    rootConfigDir: string
+  ): Promise<{ files: Map<string, Stat>; folders: Set<string> }> {
+    const files = new Map<string, Stat>();
+    const folders = new Set<string>();
+    const cleanRoot = normalizeVaultPath(rootConfigDir);
+
+    if (!(await this.baseAdapter.exists(cleanRoot))) {
+      return { files, folders };
+    }
+
+    const queue: string[] = [cleanRoot];
+    while (queue.length > 0) {
+      const currentDir = queue.shift()!;
+      if (!this.shouldSyncConfigPath(currentDir)) continue;
+      folders.add(currentDir);
+
+      let listed: ListedFiles;
+      try {
+        listed = await this.baseAdapter.list(currentDir);
+      } catch {
+        continue;
+      }
+
+      for (const subFolder of listed.folders) {
+        const cleanSub = normalizeVaultPath(subFolder);
+        if (this.shouldSyncConfigPath(cleanSub)) {
+          queue.push(cleanSub);
+        }
+      }
+
+      for (const filePath of listed.files) {
+        const cleanFile = normalizeVaultPath(filePath);
+        if (!this.shouldSyncConfigPath(cleanFile)) continue;
+        try {
+          const st = await this.baseAdapter.stat(cleanFile);
+          if (st && st.type === "file") {
+            files.set(cleanFile, st);
+          }
+        } catch {
+          // Ignore transient stat error
+        }
+      }
+    }
+
+    return { files, folders };
+  }
+
+  private async mirrorLocalConfigWriteToDrive(
+    normalizedPath: string,
+    data: ArrayBuffer,
+    options?: DataWriteOptions
+  ): Promise<void> {
+    const clean = normalizeVaultPath(normalizedPath);
+    if (!this.shouldSyncConfigPath(clean)) return;
+
+    const existing = this.cache.getEntry(clean);
+    const existingBuf = this.cache.getBinaryContent(clean);
+    if (existing && !existing.dirty && existingBuf && arrayBuffersEqual(existingBuf, data)) {
+      return;
+    }
+
+    await this.ensureLocalParentFoldersExist(clean);
+    const now = Date.now();
+
+    const entry: VirtualEntry = {
+      path: clean,
+      name: getBaseName(clean),
+      type: "file",
+      ctime: options?.ctime ?? existing?.ctime ?? now,
+      mtime: options?.mtime ?? now,
+      size: data.byteLength,
+      driveId: existing?.driveId,
+      parentId: existing?.parentId,
+      md5Checksum: existing?.md5Checksum,
+      mimeType: existing?.mimeType || guessMimeType(clean),
+      dirty: true,
+      contentCached: true,
+    };
+
+    await this.cache.setEntry(entry);
+    await this.cache.setBinaryContent(clean, data);
+    this.scheduleDebouncedUpload(clean);
+  }
+
+  private async removeSyncedConfigFromDrive(
+    normalizedPath: string,
+    useTrash = true
+  ): Promise<void> {
+    const clean = normalizeVaultPath(normalizedPath);
+    const entry = this.cache.getEntry(clean);
+    if (!entry) return;
+
+    await this.removeEntryAndDescendantsFromCache(clean, false);
+
+    if (entry.driveId && this.isDriveReady()) {
+      this.incrementActiveUploads();
+      try {
+        if (useTrash) {
+          await this.driveClient.trashFile(entry.driveId);
+        } else {
+          await this.driveClient.deleteFile(entry.driveId);
+        }
+      } catch (err) {
+        console.error(`[GoogleDriveDataAdapter] Failed to delete config ${clean} on Drive:`, err);
+      } finally {
+        this.decrementActiveUploads();
+      }
+    }
+  }
+
+  private async ensureBaseAdapterFolderExists(folderPath: string): Promise<void> {
+    const clean = normalizeVaultPath(folderPath);
+    if (!clean) return;
+
+    const parts = clean.split("/");
+    let current = "";
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      try {
+        if (!(await this.baseAdapter.exists(current))) {
+          await this.baseAdapter.mkdir(current);
+        }
+      } catch {
+        // Ignore if directory already exists
+      }
+    }
+  }
+
+  private async writeConfigFileToBaseAdapter(
+    filePath: string,
+    data: ArrayBuffer,
+    mtime?: number,
+    ctime?: number
+  ): Promise<void> {
+    const clean = normalizeVaultPath(filePath);
+    const parent = getParentPath(clean);
+    if (parent) {
+      await this.ensureBaseAdapterFolderExists(parent);
+    }
+
+    try {
+      if (await this.baseAdapter.exists(clean)) {
+        const currentBuf = await this.baseAdapter.readBinary(clean);
+        if (arrayBuffersEqual(currentBuf, data)) {
+          return;
+        }
+      }
+    } catch {
+      // Proceed to write
+    }
+
+    await this.baseAdapter.writeBinary(clean, data, { mtime, ctime });
+  }
+
+  private async removeFromBaseAdapterIfExists(
+    targetPath: string,
+    isFolder: boolean
+  ): Promise<void> {
+    const clean = normalizeVaultPath(targetPath);
+    try {
+      if (await this.baseAdapter.exists(clean)) {
+        if (isFolder) {
+          await this.baseAdapter.rmdir(clean, true);
+        } else {
+          await this.baseAdapter.remove(clean);
+        }
+      }
+    } catch {
+      // Ignore if already removed locally
+    }
+  }
+
+  private async renameOnBaseAdapterIfExists(oldPath: string, newPath: string): Promise<void> {
+    const oldClean = normalizeVaultPath(oldPath);
+    const newClean = normalizeVaultPath(newPath);
+    try {
+      if (await this.baseAdapter.exists(oldClean)) {
+        const parent = getParentPath(newClean);
+        if (parent) {
+          await this.ensureBaseAdapterFolderExists(parent);
+        }
+        await this.baseAdapter.rename(oldClean, newClean);
+      }
+    } catch {
+      // Ignore if rename fails locally
     }
   }
 }

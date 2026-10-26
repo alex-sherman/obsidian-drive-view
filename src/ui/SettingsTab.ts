@@ -124,6 +124,26 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl)
+      .setName("Sync Vault Settings & Plugins (.obsidian)")
+      .setDesc(
+        "Mirrors core settings, themes, snippets, and installed plugins between your local .obsidian folder and Google Drive (excludes workspace layout and this plugin's auth state)."
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.syncConfigDir).onChange(async (val) => {
+          await this.plugin.updateSettings({ syncConfigDir: val });
+          if (val && this.plugin.oauth.isAuthenticated() && this.plugin.settings.rootFolderId) {
+            new Notice("Syncing .obsidian settings & plugins with Google Drive...");
+            const { pulled, pushed } =
+              await this.plugin.driveAdapter.reconcileConfigDirWithDrive();
+            new Notice(
+              `.obsidian sync complete (${pulled} pulled from Drive, ${pushed} uploaded to Drive).`
+            );
+            this.display();
+          }
+        })
+      );
+
     // 3. Advanced Settings (Collapsible Dropdown)
     const advancedDetails = containerEl.createEl("details", {
       attr: {

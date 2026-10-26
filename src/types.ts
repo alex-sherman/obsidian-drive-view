@@ -48,6 +48,10 @@ export interface GoogleDriveSettings {
    * Max file size (in MB) to prefetch automatically for blob URLs
    */
   maxPrefetchBinarySizeMB: number;
+  /**
+   * Whether to sync the `.obsidian` configuration and plugins directory with Google Drive
+   */
+  syncConfigDir: boolean;
 }
 
 export const DEFAULT_SETTINGS: GoogleDriveSettings = {
@@ -61,6 +65,7 @@ export const DEFAULT_SETTINGS: GoogleDriveSettings = {
   pollIntervalSec: 30,
   prefetchBinaries: true,
   maxPrefetchBinarySizeMB: 25,
+  syncConfigDir: false,
 };
 
 export interface VirtualEntry {

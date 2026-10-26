@@ -41,6 +41,51 @@ export function isConfigOrInternalPath(normalizedPath: string, configDir: string
   return clean === cleanConfig || clean.startsWith(`${cleanConfig}/`);
 }
 
+/**
+ * Returns true if `normalizedPath` is inside `configDir` (`.obsidian`) AND is safe to sync across devices.
+ * Excludes volatile workspace files (`workspace.json`, `workspace-mobile.json`) and this plugin's own directory
+ * so OAuth tokens and symlinked dev builds are never overwritten.
+ */
+export function isSyncableConfigPath(
+  normalizedPath: string,
+  configDir: string = ".obsidian",
+  selfPluginIds: string[] = ["obsidian-drive-view", "obsidian-drive-sync"]
+): boolean {
+  const clean = normalizeVaultPath(normalizedPath);
+  const cleanConfig = normalizeVaultPath(configDir || ".obsidian");
+  if (!isConfigOrInternalPath(clean, cleanConfig)) {
+    return false;
+  }
+  if (clean === cleanConfig) {
+    return true;
+  }
+
+  const relPath = clean.slice(cleanConfig.length + 1);
+  if (
+    relPath === "workspace.json" ||
+    relPath === "workspace-mobile.json" ||
+    relPath === "workspace" ||
+    relPath === "graph.json"
+  ) {
+    return false;
+  }
+
+  const baseName = getBaseName(relPath);
+  if (baseName === ".DS_Store" || baseName === "Thumbs.db" || baseName === ".git") {
+    return false;
+  }
+
+  if (
+    selfPluginIds.some(
+      (id) => relPath === `plugins/${id}` || relPath.startsWith(`plugins/${id}/`)
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function isTextFilePath(normalizedPath: string): boolean {
   const lower = normalizedPath.toLowerCase();
   const textExtensions = [
@@ -107,6 +152,16 @@ export function concatArrayBuffers(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer 
   out.set(new Uint8Array(a), 0);
   out.set(new Uint8Array(b), a.byteLength);
   return out.buffer;
+}
+
+export function arrayBuffersEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  const viewA = new Uint8Array(a);
+  const viewB = new Uint8Array(b);
+  for (let i = 0; i < viewA.length; i++) {
+    if (viewA[i] !== viewB[i]) return false;
+  }
+  return true;
 }
 
 export function isMarkdownFilePath(normalizedPath: string): boolean {
