@@ -1,4 +1,4 @@
-# Obsidian Drive View (`obsidian-drive-view`)
+# Drive View (`drive-view`)
 
 An Obsidian plugin for **Desktop and Mobile** that mounts a Google Drive folder as a virtual vault backend by replacing `app.vault.adapter` at runtime (`GoogleDriveDataAdapter`), backed by an in-memory + IndexedDB cache.
 
@@ -26,13 +26,13 @@ bun run build
 
 Copy `main.js` and `manifest.json` into your stub vault's plugin directory:
 ```text
-<YourVault>/.obsidian/plugins/obsidian-drive-view/
+<YourVault>/.obsidian/plugins/drive-view/
 ├── main.js
 └── manifest.json
 ```
 
 ### 2. Sign In & Select a Folder
-- **On Desktop:** Open **Settings → Obsidian Drive View**, click **Sign in with Google**, and then click **Browse / Create Folder...** to pick or create a Google Drive folder for your vault.
+- **On Desktop:** Open **Settings → Drive View**, click **Sign in with Google**, and then click **Browse / Create Folder...** to pick or create a Google Drive folder for your vault.
 - **On Mobile (iOS / Android):**
   - **Option A (Fastest):** Click **Copy Auth Bundle** in the Desktop plugin settings and paste it into the **Quick Cross-Device Auth Bundle** field on Mobile.
   - **Option B (Direct Mobile Sign-In):** Tap **Sign in with Google** on Mobile, approve access in your mobile browser, copy the resulting `http://127.0.0.1/?code=...` URL from your browser's address bar, and paste it into the modal.

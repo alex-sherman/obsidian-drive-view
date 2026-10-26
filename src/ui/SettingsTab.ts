@@ -12,7 +12,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Obsidian Drive View" });
+    containerEl.createEl("h2", { text: "Drive View" });
 
     // Status Banner
     const statusBanner = containerEl.createDiv({

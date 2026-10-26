@@ -55,12 +55,12 @@ export default class GoogleDriveVaultPlugin extends Plugin {
       this.updateStatusBarUi();
     }
 
-    this.addRibbonIcon("cloud", "Obsidian Drive View: Sync Now", async () => {
+    this.addRibbonIcon("cloud", "Drive View: Sync now", async () => {
       await this.syncNow();
     });
 
     this.addCommand({
-      id: "obsidian-drive-view-sync-now",
+      id: "sync-now",
       name: "Sync now with Google Drive",
       callback: async () => {
         await this.syncNow();
@@ -68,7 +68,7 @@ export default class GoogleDriveVaultPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "obsidian-drive-view-flush-uploads",
+      id: "flush-uploads",
       name: "Flush pending uploads immediately",
       callback: async () => {
         await this.driveAdapter.flushAllPendingUploads();
@@ -77,7 +77,7 @@ export default class GoogleDriveVaultPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "obsidian-drive-view-rebuild-cache",
+      id: "rebuild-cache",
       name: "Rebuild local IndexedDB cache from Google Drive",
       callback: async () => {
         await this.rebuildCacheFromDrive();

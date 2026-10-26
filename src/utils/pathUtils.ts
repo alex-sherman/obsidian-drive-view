@@ -49,7 +49,7 @@ export function isConfigOrInternalPath(normalizedPath: string, configDir: string
 export function isSyncableConfigPath(
   normalizedPath: string,
   configDir: string = ".obsidian",
-  selfPluginIds: string[] = ["obsidian-drive-view", "obsidian-drive-sync"]
+  selfPluginIds: string[] = ["drive-view", "obsidian-drive-view", "obsidian-drive-sync"]
 ): boolean {
   const clean = normalizeVaultPath(normalizedPath);
   const cleanConfig = normalizeVaultPath(configDir || ".obsidian");

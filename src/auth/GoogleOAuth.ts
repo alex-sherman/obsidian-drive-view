@@ -150,7 +150,7 @@ export class GoogleOAuthManager {
           res.end(`
             <!DOCTYPE html>
             <html>
-              <head><title>Obsidian Drive View Connected</title></head>
+              <head><title>Drive View Connected</title></head>
               <body style="font-family: system-ui, sans-serif; text-align: center; padding: 3rem;">
                 <h2>Connected to Google Drive!</h2>
                 <p>You can close this tab and return to Obsidian.</p>

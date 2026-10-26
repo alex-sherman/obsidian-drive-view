@@ -290,13 +290,13 @@ test("GoogleDriveDataAdapter virtual filesystem & Drive sync lifecycle", async (
   await proxied.write(".obsidian/community-plugins.json", '["dataview"]');
   await proxied.write(".obsidian/workspace.json", '{"main":{}}');
   await proxied.write(".obsidian/graph.json", '{"collapse-filter":true}');
-  await proxied.write(".obsidian/plugins/obsidian-drive-view/data.json", '{"refreshToken":"secret"}');
+  await proxied.write(".obsidian/plugins/drive-view/data.json", '{"refreshToken":"secret"}');
 
   // community-plugins.json should be queued in cache for Drive upload, while workspace.json, graph.json, and self plugin data.json are excluded
   expect(cache.getEntry(".obsidian/community-plugins.json")).toBeDefined();
   expect(cache.getEntry(".obsidian/workspace.json")).toBeUndefined();
   expect(cache.getEntry(".obsidian/graph.json")).toBeUndefined();
-  expect(cache.getEntry(".obsidian/plugins/obsidian-drive-view/data.json")).toBeUndefined();
+  expect(cache.getEntry(".obsidian/plugins/drive-view/data.json")).toBeUndefined();
 
   // .obsidian should never appear in root vault folder listings
   const rootListAfterConfig = await proxied.list("");
