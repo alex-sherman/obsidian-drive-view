@@ -14,6 +14,7 @@ declare module "obsidian" {
   export interface DataWriteOptions {
     ctime?: number;
     mtime?: number;
+    immediate?: () => void;
   }
 
   export interface DataAdapter {
@@ -162,6 +163,7 @@ declare module "obsidian" {
     constructor(containerEl: HTMLElement);
     setName(name: string): this;
     setDesc(desc: string): this;
+    setHeading(): this;
     addText(cb: (component: TextComponent) => unknown): this;
     addButton(cb: (component: ButtonComponent) => unknown): this;
     addToggle(cb: (component: ToggleComponent) => unknown): this;
@@ -193,7 +195,7 @@ declare module "obsidian" {
     status: number;
     headers: Record<string, string>;
     arrayBuffer: ArrayBuffer;
-    json: any;
+    json: unknown;
     text: string;
   }
 
@@ -204,9 +206,12 @@ interface HTMLElement {
   empty(): void;
   setText(val: string): void;
   setAttr(key: string, val: string): void;
+  setCssStyles(styles: Partial<CSSStyleDeclaration> | Record<string, string>): void;
+  setCssProps(props: Record<string, string>): void;
   createEl<K extends keyof HTMLElementTagNameMap>(
     tag: K,
     o?: { text?: string; cls?: string; attr?: Record<string, string> }
   ): HTMLElementTagNameMap[K];
   createDiv(o?: { text?: string; cls?: string; attr?: Record<string, string> }): HTMLDivElement;
+  createSpan(o?: { text?: string; cls?: string; attr?: Record<string, string> }): HTMLSpanElement;
 }

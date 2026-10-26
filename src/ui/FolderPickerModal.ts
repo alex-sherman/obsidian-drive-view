@@ -21,7 +21,7 @@ export class FolderPickerModal extends Modal {
     super(app);
   }
 
-  public async onOpen(): Promise<void> {
+  public onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
 
@@ -55,7 +55,7 @@ export class FolderPickerModal extends Modal {
           mimeType: "application/vnd.google-apps.folder",
         });
       });
-    selectCurrentBtn.buttonEl.style.flexShrink = "0";
+    selectCurrentBtn.buttonEl.setCssStyles({ flexShrink: "0" });
 
     // Folder List Area
     this.listContainerEl = contentEl.createDiv({
@@ -77,7 +77,7 @@ export class FolderPickerModal extends Modal {
       .onChange((val) => {
         this.newFolderName = val.trim();
       });
-    nameInput.inputEl.style.flex = "1";
+    nameInput.inputEl.setCssStyles({ flex: "1" });
 
     new ButtonComponent(createRow)
       .setButtonText("Create & Select")
@@ -99,7 +99,7 @@ export class FolderPickerModal extends Modal {
         }
       });
 
-    await this.renderCurrentFolder();
+    void this.renderCurrentFolder();
   }
 
   private async renderCurrentFolder(): Promise<void> {

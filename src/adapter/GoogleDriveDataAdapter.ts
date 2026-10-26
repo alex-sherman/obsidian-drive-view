@@ -50,7 +50,7 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     public readonly cache: VirtualVaultCache,
     private readonly driveClient: DriveClient,
     private readonly getSettings: () => GoogleDriveSettings,
-    private readonly configDir: string = ".obsidian",
+    private readonly configDir: string,
     private readonly onSyncStateChange?: (state: SyncState, detail?: string) => void,
     private readonly onVaultEvent?: (evt: ObsidianVaultRawEvent) => void
   ) {}
@@ -61,14 +61,15 @@ export class GoogleDriveDataAdapter implements DataAdapter {
    * if not defined on GoogleDriveDataAdapter.
    */
   public createProxiedAdapter(): DataAdapter {
-    return new Proxy(this, {
-      get(target, prop, receiver) {
+    return new Proxy(this as unknown as DataAdapter, {
+      get(target: GoogleDriveDataAdapter, prop: string | symbol, receiver: unknown): unknown {
         if (prop in target) {
-          const val = Reflect.get(target, prop, receiver);
-          return typeof val === "function" ? val.bind(target) : val;
+          const val = Reflect.get(target, prop, receiver) as unknown;
+          return typeof val === "function" ? (val as (...args: unknown[]) => unknown).bind(target) : val;
         }
-        const baseVal = Reflect.get(target.baseAdapter as object, prop, target.baseAdapter);
-        return typeof baseVal === "function" ? baseVal.bind(target.baseAdapter) : baseVal;
+        const base = target.baseAdapter as Record<string | symbol, unknown>;
+        const baseVal = base[prop];
+        return typeof baseVal === "function" ? (baseVal as (...args: unknown[]) => unknown).bind(base) : baseVal;
       },
     });
   }
@@ -666,9 +667,8 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     await this.cache.setBinaryContent(clean, data);
 
     // Invoke Obsidian's internal `options.immediate` callback if provided by `Vault.modify`
-    const anyOptions = options as (DataWriteOptions & { immediate?: () => void }) | undefined;
-    if (typeof anyOptions?.immediate === "function") {
-      anyOptions.immediate();
+    if (typeof options?.immediate === "function") {
+      options.immediate();
     }
 
     // Crucial: Notify Obsidian's Vault BEFORE write() resolves so Vault.create() finds the new TFile in fileMap!
@@ -940,8 +940,9 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     await this.ensureLocalParentFoldersExist(newClean);
     await this.renameInCacheAndNotify(oldClean, newClean);
 
-    if (this.writeTimers.has(oldClean)) {
-      clearTimeout(this.writeTimers.get(oldClean)!);
+    const existingRenameTimer = this.writeTimers.get(oldClean);
+    if (existingRenameTimer) {
+      window.clearTimeout(existingRenameTimer);
       this.writeTimers.delete(oldClean);
       this.scheduleDebouncedUpload(newClean);
       return;
@@ -1087,13 +1088,13 @@ export class GoogleDriveDataAdapter implements DataAdapter {
   private scheduleDebouncedUpload(normalizedPath: string): void {
     const existingTimer = this.writeTimers.get(normalizedPath);
     if (existingTimer) {
-      clearTimeout(existingTimer);
+      window.clearTimeout(existingTimer);
     }
 
     const delay = Math.max(250, this.getSettings().writeDebounceMs || 2500);
     this.onSyncStateChange?.("syncing", `Queued changes for ${getBaseName(normalizedPath)}...`);
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       this.writeTimers.delete(normalizedPath);
       void this.flushFileUpload(normalizedPath);
     }, delay);
@@ -1105,7 +1106,7 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     const pendingPaths = Array.from(this.writeTimers.keys());
     for (const path of pendingPaths) {
       const timer = this.writeTimers.get(path);
-      if (timer) clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
       this.writeTimers.delete(path);
     }
 
@@ -1183,7 +1184,7 @@ export class GoogleDriveDataAdapter implements DataAdapter {
     for (const item of toRemove) {
       const timer = this.writeTimers.get(item.path);
       if (timer) {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         this.writeTimers.delete(item.path);
       }
       await this.cache.deleteEntry(item.path);

@@ -93,7 +93,7 @@ export class VaultMounter {
     const internalVault = this.app.vault as InternalVault;
     if (typeof internalVault.onChange !== "function") return;
 
-    const configDir = this.app.vault.configDir || ".obsidian";
+    const configDir = this.app.vault.configDir;
     if (evt.type === "renamed") {
       if (
         isConfigOrInternalPath(evt.newPath, configDir) ||
@@ -174,7 +174,7 @@ export class VaultMounter {
    */
   public async reconcileFullVault(driveAdapter: GoogleDriveDataAdapter): Promise<void> {
     const internalVault = this.app.vault as InternalVault;
-    const configDir = this.app.vault.configDir || ".obsidian";
+    const configDir = this.app.vault.configDir;
 
     const entries = driveAdapter.cache
       .getAllEntries()

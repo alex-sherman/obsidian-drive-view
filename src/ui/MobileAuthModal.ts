@@ -16,7 +16,11 @@ export class ManualOAuthModal extends Modal {
     super(app);
   }
 
-  public async onOpen(): Promise<void> {
+  public onOpen(): void {
+    void this.renderModal();
+  }
+
+  private async renderModal(): Promise<void> {
     const { contentEl } = this;
     contentEl.empty();
 
@@ -58,7 +62,7 @@ export class ManualOAuthModal extends Modal {
       .onChange((val) => {
         pastedInput = val;
       });
-    textInput.inputEl.style.width = "100%";
+    textInput.inputEl.setCssStyles({ width: "100%" });
 
     const submitDiv = contentEl.createDiv({
       attr: { style: "display: flex; gap: 8px; justify-content: flex-end;" },

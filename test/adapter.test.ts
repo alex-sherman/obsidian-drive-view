@@ -4,6 +4,18 @@ import type { DriveClient } from "../src/drive/DriveClient";
 import type { GoogleDriveSettings } from "../src/types";
 import type { ObsidianVaultRawEvent } from "../src/adapter/GoogleDriveDataAdapter";
 
+if (typeof window === "undefined") {
+  (globalThis as unknown as { window: unknown }).window = globalThis;
+}
+if (!(globalThis as unknown as { window: { localStorage?: unknown } }).window.localStorage) {
+  const storage = new Map<string, string>();
+  (globalThis as unknown as { window: { localStorage: unknown } }).window.localStorage = {
+    getItem: (k: string) => storage.get(k) ?? null,
+    setItem: (k: string, v: string) => storage.set(k, v),
+    removeItem: (k: string) => storage.delete(k),
+  };
+}
+
 // Mock the runtime "obsidian" module before dynamically importing plugin modules
 mock.module("obsidian", () => ({
   Platform: { isDesktopApp: true, isMobileApp: false },

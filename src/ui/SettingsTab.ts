@@ -12,7 +12,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Drive View" });
+    new Setting(containerEl).setName("Drive View").setHeading();
 
     // Status Banner
     const statusBanner = containerEl.createDiv({
@@ -23,17 +23,17 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
     });
     const isAuth = this.plugin.oauth.isAuthenticated();
     const isMounted = this.plugin.mounter.isMounted();
-    statusBanner.createEl("div", {
+    statusBanner.createDiv({
       text: `Status: ${this.plugin.currentSyncState.toUpperCase()} — ${this.plugin.currentSyncDetail}`,
       attr: { style: "font-weight: 600; margin-bottom: 4px;" },
     });
-    statusBanner.createEl("div", {
+    statusBanner.createDiv({
       text: `Adapter Mounted: ${isMounted ? "Yes (Google Drive Virtual Backend Active)" : "No (Local Stub Mode)"} | Cached Items: ${this.plugin.cache.getAllEntries().length}`,
       attr: { style: "font-size: 0.9em; color: var(--text-muted);" },
     });
 
     // 1. Google Account Section
-    containerEl.createEl("h3", { text: "1. Google Account" });
+    new Setting(containerEl).setName("1. Google Account").setHeading();
 
     const authSetting = new Setting(containerEl)
       .setName("Google Drive Account")
@@ -126,7 +126,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
     }
 
     // 2. Vault Root Folder Section
-    containerEl.createEl("h3", { text: "2. Google Drive Vault Folder" });
+    new Setting(containerEl).setName("2. Google Drive Vault Folder").setHeading();
 
     const folderDesc = this.plugin.settings.rootFolderId
       ? `Active folder: "${this.plugin.settings.rootFolderName}"`
@@ -159,20 +159,21 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
           })
       );
 
+    const configFolder = this.app.vault.configDir;
     new Setting(containerEl)
-      .setName("Sync Vault Settings & Plugins (.obsidian)")
+      .setName(`Sync Vault Settings & Plugins (${configFolder})`)
       .setDesc(
-        "Mirrors core settings, themes, snippets, and installed plugins between your local .obsidian folder and Google Drive (excludes workspace layout and this plugin's auth state)."
+        `Mirrors core settings, themes, snippets, and installed plugins between your local ${configFolder} folder and Google Drive (excludes workspace layout and this plugin's auth state).`
       )
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.syncConfigDir).onChange(async (val) => {
           await this.plugin.updateSettings({ syncConfigDir: val });
           if (val && this.plugin.oauth.isAuthenticated() && this.plugin.settings.rootFolderId) {
-            new Notice("Syncing .obsidian settings & plugins with Google Drive...");
+            new Notice(`Syncing ${configFolder} settings & plugins with Google Drive...`);
             const { pulled, pushed } =
               await this.plugin.driveAdapter.reconcileConfigDirWithDrive();
             new Notice(
-              `.obsidian sync complete (${pulled} pulled from Drive, ${pushed} uploaded to Drive).`
+              `${configFolder} sync complete (${pulled} pulled from Drive, ${pushed} uploaded to Drive).`
             );
             this.display();
           }

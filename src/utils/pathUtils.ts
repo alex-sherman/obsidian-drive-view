@@ -37,22 +37,22 @@ export function getBaseName(normalizedPath: string): string {
 
 export function isConfigOrInternalPath(normalizedPath: string, configDir: string): boolean {
   const clean = normalizeVaultPath(normalizedPath);
-  const cleanConfig = normalizeVaultPath(configDir || ".obsidian");
+  const cleanConfig = normalizeVaultPath(configDir);
   return clean === cleanConfig || clean.startsWith(`${cleanConfig}/`);
 }
 
 /**
- * Returns true if `normalizedPath` is inside `configDir` (`.obsidian`) AND is safe to sync across devices.
+ * Returns true if `normalizedPath` is inside `configDir` AND is safe to sync across devices.
  * Excludes volatile workspace files (`workspace.json`, `workspace-mobile.json`) and this plugin's own directory
  * so OAuth tokens and symlinked dev builds are never overwritten.
  */
 export function isSyncableConfigPath(
   normalizedPath: string,
-  configDir: string = ".obsidian",
+  configDir: string,
   selfPluginIds: string[] = ["drive-view", "obsidian-drive-view", "obsidian-drive-sync"]
 ): boolean {
   const clean = normalizeVaultPath(normalizedPath);
-  const cleanConfig = normalizeVaultPath(configDir || ".obsidian");
+  const cleanConfig = normalizeVaultPath(configDir);
   if (!isConfigOrInternalPath(clean, cleanConfig)) {
     return false;
   }
@@ -203,8 +203,8 @@ export function driveMarkdownToObsidian(text: string): string {
   const normalized = text.replace(/\r\n?/g, "\n");
   return transformOutsideCodeBlocks(normalized, (segment) => {
     // 1. In Google Docs Markdown exports, each empty paragraph is `\n\n&nbsp;\n\n`.
-    //    Replace `(?<=\n)&nbsp;\n\n` with `\n` so `\n\n&nbsp;\n\n` -> `\n\n\n` (2 blank lines).
-    let out = segment.replace(/(?<=\n)[ \t]*(?:&nbsp;|\u00A0)[ \t]*\n\n/g, "\n");
+    //    Replace `(\n)&nbsp;\n\n` with `$1\n` so `\n\n&nbsp;\n\n` -> `\n\n\n` (without regex lookbehind for iOS < 16.4).
+    let out = segment.replace(/(^|\n)[ \t]*(?:&nbsp;|\u00A0)[ \t]*\n\n/g, "$1\n");
     // 2. Replace any remaining standalone `&nbsp;` lines (e.g. `Line1\n&nbsp;\nLine2` or EOF) with empty line
     out = out.replace(/^[ \t]*(?:&nbsp;|\u00A0)[ \t]*$/gm, "");
     return out;

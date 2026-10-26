@@ -45,7 +45,7 @@ export class VirtualVaultCache {
         }
       };
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onerror = () => reject(req.error ?? new Error("IndexedDB database open failed"));
     });
 
     await this.loadFromIndexedDb();
@@ -110,7 +110,7 @@ export class VirtualVaultCache {
         store.put({ ...entry, path: normalized });
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed"));
     });
   }
 
@@ -243,7 +243,7 @@ export class VirtualVaultCache {
         store.put(value);
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed"));
     });
   }
 
@@ -254,7 +254,7 @@ export class VirtualVaultCache {
       const store = tx.objectStore(storeName);
       store.delete(key);
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed"));
     });
   }
 
@@ -265,7 +265,7 @@ export class VirtualVaultCache {
       const store = tx.objectStore(storeName);
       store.clear();
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed"));
     });
   }
 
@@ -276,7 +276,7 @@ export class VirtualVaultCache {
       const store = tx.objectStore(storeName);
       const req = store.getAll();
       req.onsuccess = () => resolve((req.result || []) as T[]);
-      req.onerror = () => reject(req.error);
+      req.onerror = () => reject(req.error ?? new Error("IndexedDB getAll failed"));
     });
   }
 
@@ -296,7 +296,7 @@ export class VirtualVaultCache {
           resolve(results);
         }
       };
-      cursorReq.onerror = () => reject(cursorReq.error);
+      cursorReq.onerror = () => reject(cursorReq.error ?? new Error("IndexedDB cursor failed"));
     });
   }
 }

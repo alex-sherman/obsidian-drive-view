@@ -43,7 +43,7 @@ export default class GoogleDriveVaultPlugin extends Plugin {
       this.cache,
       this.driveClient,
       () => this.settings,
-      this.app.vault.configDir || ".obsidian",
+      this.app.vault.configDir,
       (state, detail) => this.setSyncState(state, detail),
       (evt) => {
         this.mounter.applyVaultRawEvent(evt);

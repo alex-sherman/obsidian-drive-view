@@ -52,7 +52,8 @@ export class DriveClient {
     const q = `mimeType = '${DRIVE_FOLDER_MIME}' and name = '${escapedName}' and 'root' in parents and trashed = false`;
     const searchUrl = `${DRIVE_API_BASE}/files?q=${encodeURIComponent(q)}&fields=files(${FILE_FIELDS})&pageSize=10`;
     const searchRes = await this.authorizedRequest({ url: searchUrl, method: "GET" });
-    const files = (searchRes.json?.files || []) as DriveFileMetadata[];
+    const searchJson = searchRes.json as { files?: DriveFileMetadata[] } | undefined;
+    const files = searchJson?.files || [];
 
     if (files.length > 0) {
       return files[0];
@@ -79,7 +80,8 @@ export class DriveClient {
       method: "GET",
     });
 
-    return (res.json?.files || []) as DriveFileMetadata[];
+    const resJson = res.json as { files?: DriveFileMetadata[] } | undefined;
+    return resJson?.files || [];
   }
 
   /**
@@ -341,7 +343,8 @@ export class DriveClient {
       url: `${DRIVE_API_BASE}/changes/startPageToken`,
       method: "GET",
     });
-    return res.json.startPageToken as string;
+    const json = res.json as { startPageToken?: string } | undefined;
+    return json?.startPageToken || "";
   }
 
   public async listChanges(pageToken: string): Promise<{
