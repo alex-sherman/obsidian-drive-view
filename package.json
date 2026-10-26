@@ -1,0 +1,19 @@
+{
+  "name": "obsidian-drive-view",
+  "version": "0.1.0",
+  "description": "Use a Google Drive folder as a virtual backend DataAdapter for an Obsidian vault on Desktop and Mobile.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "bun build src/main.ts --outfile main.js --format cjs --target browser --external obsidian --external electron --watch",
+    "build": "bun build src/main.ts --outfile main.js --format cjs --target browser --external obsidian --external electron",
+    "test": "bun test"
+  },
+  "keywords": [
+    "obsidian",
+    "google-drive",
+    "vault",
+    "data-adapter"
+  ],
+  "author": "",
+  "license": "MIT"
+}

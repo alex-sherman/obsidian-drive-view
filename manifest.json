@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-drive-view",
+  "name": "Obsidian Drive View",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Uses a Google Drive folder as a virtual vault backend (DataAdapter) with an IndexedDB + in-memory cache on Desktop and Mobile.",
+  "author": "",
+  "isDesktopOnly": false
+}
