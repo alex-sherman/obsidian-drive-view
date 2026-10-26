@@ -301,4 +301,21 @@ test("GoogleDriveDataAdapter virtual filesystem & Drive sync lifecycle", async (
   // .obsidian should never appear in root vault folder listings
   const rootListAfterConfig = await proxied.list("");
   expect(rootListAfterConfig.folders.includes(".obsidian")).toBe(false);
+
+  // 9. Test serverless relay OAuth URL generation
+  const oauth = new GoogleOAuthManager(
+    () => settings,
+    async () => {}
+  );
+  let launchedUrl = "";
+  await oauth.startLoginFlow((url) => {
+    launchedUrl = url;
+  });
+  expect(
+    launchedUrl.includes(
+      "https://drive-view-auth.alexgshm.workers.dev/login"
+    )
+  ).toBe(true);
+  expect(launchedUrl.includes("challenge=")).toBe(true);
+  expect(launchedUrl.includes("state=")).toBe(true);
 });

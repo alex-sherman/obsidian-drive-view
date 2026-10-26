@@ -86,6 +86,20 @@ export default class GoogleDriveVaultPlugin extends Plugin {
 
     this.addSettingTab(new GoogleDriveSettingTab(this.app, this));
 
+    this.registerObsidianProtocolHandler("drive-view-auth", async (params) => {
+      try {
+        new Notice("Connecting to Google Drive...");
+        await this.oauth.handleDeepLinkCallback(params);
+        new Notice("Connected to Google Drive!");
+        await this.connectAndMountDriveVault();
+      } catch (err) {
+        console.error("[DriveView] Protocol handler error:", err);
+        new Notice(
+          `Google Sign-In failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    });
+
     // Mount immediately from IndexedDB cache if already configured, then sync with Drive
     this.app.workspace.onLayoutReady(async () => {
       if (this.oauth.isAuthenticated()) {

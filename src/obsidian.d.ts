@@ -110,6 +110,10 @@ declare module "obsidian" {
     loadData(): Promise<unknown>;
     saveData(data: unknown): Promise<void>;
     registerInterval(id: number): number;
+    registerObsidianProtocolHandler(
+      action: string,
+      handler: (params: Record<string, string>) => unknown
+    ): void;
   }
 
   export class PluginSettingTab {

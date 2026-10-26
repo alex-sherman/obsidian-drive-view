@@ -43,38 +43,32 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
           : "Sign in with your Google account to mount a Drive folder as your vault."
       );
 
-    if (Platform.isDesktopApp) {
-      authSetting.addButton((btn) =>
-        btn
-          .setButtonText(isAuth ? "Re-authenticate" : "Sign in with Google")
-          .setCta()
-          .onClick(async () => {
-            try {
-              new Notice("Opening browser for Google Sign-In...");
-              await this.plugin.oauth.startDesktopLoopbackFlow((url) => {
-                window.open(url, "_blank");
-              });
-              new Notice("Connected to Google Drive!");
-              await this.plugin.connectAndMountDriveVault();
-              this.display();
-            } catch (err) {
-              new Notice(`Sign-in error: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          })
-      );
-    } else {
-      authSetting.addButton((btn) =>
-        btn
-          .setButtonText(isAuth ? "Re-authenticate" : "Sign in with Google")
-          .setCta()
-          .onClick(() => {
-            new ManualOAuthModal(this.app, this.plugin.oauth, async () => {
-              await this.plugin.connectAndMountDriveVault();
-              this.display();
-            }).open();
-          })
-      );
-    }
+    authSetting.addButton((btn) =>
+      btn
+        .setButtonText(isAuth ? "Re-authenticate" : "Sign in with Google")
+        .setCta()
+        .onClick(async () => {
+          try {
+            new Notice("Opening browser for Google Sign-In...");
+            await this.plugin.oauth.startLoginFlow((url) => {
+              window.open(url, "_blank");
+            });
+          } catch (err) {
+            new Notice(`Sign-in error: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        })
+    );
+
+    authSetting.addButton((btn) =>
+      btn
+        .setButtonText("Manual Code")
+        .onClick(() => {
+          new ManualOAuthModal(this.app, this.plugin.oauth, async () => {
+            await this.plugin.connectAndMountDriveVault();
+            this.display();
+          }).open();
+        })
+    );
 
     if (isAuth) {
       authSetting.addButton((btn) =>

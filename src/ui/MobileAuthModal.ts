@@ -1,9 +1,11 @@
 import { App, ButtonComponent, Modal, Notice, TextComponent } from "obsidian";
-import { generatePkcePair, GoogleOAuthManager } from "../auth/GoogleOAuth";
+import {
+  generatePkcePair,
+  GoogleOAuthManager,
+} from "../auth/GoogleOAuth";
 
 export class ManualOAuthModal extends Modal {
   private codeVerifier = "";
-  private redirectUri = "http://127.0.0.1";
   private authUrl = "";
 
   constructor(
@@ -24,7 +26,7 @@ export class ManualOAuthModal extends Modal {
       const pkce = await generatePkcePair();
       this.codeVerifier = pkce.codeVerifier;
       const state = Math.random().toString(36).substring(2, 12);
-      this.authUrl = this.oauth.buildAuthUrl(this.redirectUri, pkce.codeChallenge, state);
+      this.authUrl = this.oauth.buildLoginUrl(pkce.codeChallenge, state);
     } catch (err) {
       contentEl.createEl("p", {
         text: err instanceof Error ? err.message : String(err),
@@ -46,14 +48,13 @@ export class ManualOAuthModal extends Modal {
 
     contentEl.createEl("p", {
       text:
-        "2. After approving access, Google will redirect your browser to http://127.0.0.1/?code=... " +
-        "(which may show 'This site can't be reached' on mobile). Copy that entire URL from your browser's address bar and paste it below:",
+        "2. After approving access, if Obsidian does not open automatically, copy the authorization code from the confirmation page (or the URL in your browser's address bar) and paste it below:",
     });
 
     let pastedInput = "";
     const inputDiv = contentEl.createDiv({ attr: { style: "margin-bottom: 1em;" } });
     const textInput = new TextComponent(inputDiv)
-      .setPlaceholder("http://127.0.0.1/?code=4/0A... or paste code")
+      .setPlaceholder("Paste authorization code or URL here...")
       .onChange((val) => {
         pastedInput = val;
       });
@@ -78,7 +79,6 @@ export class ManualOAuthModal extends Modal {
         try {
           await this.oauth.exchangeCodeForTokens(
             pastedInput,
-            this.redirectUri,
             this.codeVerifier
           );
           new Notice("Successfully authenticated with Google Drive!");
