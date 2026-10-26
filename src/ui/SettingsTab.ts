@@ -1,5 +1,6 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type GoogleDriveVaultPlugin from "../main";
+import { FolderPickerModal } from "./FolderPickerModal";
 import { ManualOAuthModal } from "./MobileAuthModal";
 
 export class GoogleDriveSettingTab extends PluginSettingTab {
@@ -31,64 +32,21 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
       attr: { style: "font-size: 0.9em; color: var(--text-muted);" },
     });
 
-    // 1. Authentication Section
-    containerEl.createEl("h3", { text: "1. Google OAuth 2.0 Credentials" });
-
-    const detailsEl = containerEl.createEl("details", {
-      attr: { style: "margin-bottom: 12px; font-size: 0.9em; color: var(--text-muted);" },
-    });
-    detailsEl.createEl("summary", {
-      text: "Quick 60-second setup guide for Google OAuth Client ID",
-      attr: { style: "cursor: pointer; font-weight: 500; color: var(--text-normal);" },
-    });
-    const guideList = detailsEl.createEl("ol", { attr: { style: "margin-top: 8px;" } });
-    guideList.createEl("li", {
-      text: "Open console.cloud.google.com, create/select a project, and enable the 'Google Drive API'.",
-    });
-    guideList.createEl("li", {
-      text: "Go to 'APIs & Services -> Credentials -> Create Credentials -> OAuth client ID'.",
-    });
-    guideList.createEl("li", {
-      text: "Choose Application Type: 'Desktop app' (or 'iOS' for secretless PKCE) and paste the Client ID (and Client Secret if Desktop app) below.",
-    });
-
-    new Setting(containerEl)
-      .setName("Google OAuth Client ID")
-      .setDesc("OAuth 2.0 Client ID from Google Cloud Console (.apps.googleusercontent.com)")
-      .addText((text) =>
-        text
-          .setPlaceholder("123456789-abc.apps.googleusercontent.com")
-          .setValue(this.plugin.settings.clientId)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({ clientId: value.trim() });
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Google OAuth Client Secret (Optional for PKCE)")
-      .setDesc("Required by Google only if using a 'Desktop app' Client ID type")
-      .addText((text) => {
-        text.inputEl.type = "password";
-        text
-          .setPlaceholder("GOCSPX-...")
-          .setValue(this.plugin.settings.clientSecret)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({ clientSecret: value.trim() });
-          });
-      });
+    // 1. Google Account Section
+    containerEl.createEl("h3", { text: "1. Google Account" });
 
     const authSetting = new Setting(containerEl)
-      .setName("Google Account Connection")
+      .setName("Google Drive Account")
       .setDesc(
         isAuth
-          ? "Connected to Google Drive. You can re-authenticate or export an auth bundle for mobile."
-          : "Not signed in yet."
+          ? "Connected to Google Drive."
+          : "Sign in with your Google account to mount a Drive folder as your vault."
       );
 
     if (Platform.isDesktopApp) {
       authSetting.addButton((btn) =>
         btn
-          .setButtonText(isAuth ? "Re-authenticate (Browser)" : "Sign in with Google")
+          .setButtonText(isAuth ? "Re-authenticate" : "Sign in with Google")
           .setCta()
           .onClick(async () => {
             try {
@@ -104,130 +62,87 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
             }
           })
       );
-    }
-
-    authSetting.addButton((btn) =>
-      btn
-        .setButtonText(Platform.isDesktopApp ? "Manual / Mobile Code Flow" : "Sign in with Google")
-        .onClick(() => {
-          new ManualOAuthModal(this.app, this.plugin.oauth, async () => {
-            await this.plugin.connectAndMountDriveVault();
-            this.display();
-          }).open();
-        })
-    );
-
-    // Quick Mobile Transfer Bundle (Export on Desktop -> Paste on Mobile in 1 click)
-    new Setting(containerEl)
-      .setName("Quick Cross-Device Auth Bundle (Desktop ↔ Mobile)")
-      .setDesc(
-        "Already signed in on Desktop? Copy the Auth Bundle and paste it on Mobile to skip logging in again."
-      )
-      .addButton((btn) =>
-        btn.setButtonText("Copy Auth Bundle").onClick(async () => {
-          const bundle = btoa(
-            JSON.stringify({
-              clientId: this.plugin.settings.clientId,
-              clientSecret: this.plugin.settings.clientSecret,
-              refreshToken: this.plugin.settings.refreshToken,
-              rootFolderId: this.plugin.settings.rootFolderId,
-              rootFolderName: this.plugin.settings.rootFolderName,
-            })
-          );
-          await navigator.clipboard.writeText(bundle);
-          new Notice("Copied Auth Bundle to clipboard!");
-        })
-      )
-      .addText((text) =>
-        text.setPlaceholder("Paste Auth Bundle here...").onChange(async (val) => {
-          if (!val.trim()) return;
-          try {
-            const decoded = JSON.parse(atob(val.trim()));
-            if (decoded.clientId && decoded.refreshToken) {
-              await this.plugin.updateSettings({
-                clientId: decoded.clientId,
-                clientSecret: decoded.clientSecret || "",
-                refreshToken: decoded.refreshToken,
-                rootFolderId: decoded.rootFolderId || this.plugin.settings.rootFolderId,
-                rootFolderName: decoded.rootFolderName || this.plugin.settings.rootFolderName,
-                accessToken: "",
-                tokenExpiresAt: 0,
-              });
-              new Notice("Imported Auth Bundle! Connecting to Google Drive...");
+    } else {
+      authSetting.addButton((btn) =>
+        btn
+          .setButtonText(isAuth ? "Re-authenticate" : "Sign in with Google")
+          .setCta()
+          .onClick(() => {
+            new ManualOAuthModal(this.app, this.plugin.oauth, async () => {
               await this.plugin.connectAndMountDriveVault();
               this.display();
-            }
-          } catch {
-            // Wait until valid base64 JSON is pasted
-          }
-        })
+            }).open();
+          })
       );
+    }
+
+    if (isAuth) {
+      authSetting.addButton((btn) =>
+        btn
+          .setButtonText("Sign Out")
+          .setWarning()
+          .onClick(async () => {
+            await this.plugin.unmountDriveVault();
+            await this.plugin.oauth.signOut();
+            new Notice("Signed out of Google Drive.");
+            this.display();
+          })
+      );
+    }
 
     // 2. Vault Root Folder Section
     containerEl.createEl("h3", { text: "2. Google Drive Vault Folder" });
 
-    new Setting(containerEl)
-      .setName("Root Folder Name in Google Drive")
-      .setDesc("Name of the folder in My Drive that stores this vault's files")
-      .addText((text) =>
-        text
-          .setPlaceholder("ObsidianDriveVault")
-          .setValue(this.plugin.settings.rootFolderName)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({
-              rootFolderName: value.trim() || "ObsidianDriveVault",
-            });
-          })
-      );
+    const folderDesc = this.plugin.settings.rootFolderId
+      ? `Active folder: "${this.plugin.settings.rootFolderName}"`
+      : "No folder selected yet.";
 
     new Setting(containerEl)
-      .setName("Root Folder ID (Auto-detected or Custom)")
-      .setDesc(
-        "Leave blank to automatically find/create the folder by name, or paste a specific Google Drive Folder ID."
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder("Auto-filled upon connection")
-          .setValue(this.plugin.settings.rootFolderId)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({ rootFolderId: value.trim() });
-          })
-      )
+      .setName("Vault Folder in Google Drive")
+      .setDesc(folderDesc)
       .addButton((btn) =>
         btn
-          .setButtonText("Verify / Connect Folder")
+          .setButtonText("Browse / Create Folder...")
           .setCta()
-          .onClick(async () => {
-            try {
-              await this.plugin.connectAndMountDriveVault(true);
-              this.display();
-            } catch (err) {
-              new Notice(`Folder connection failed: ${err instanceof Error ? err.message : String(err)}`);
+          .onClick(() => {
+            if (!this.plugin.oauth.isAuthenticated()) {
+              new Notice("Please sign in with Google first.");
+              return;
             }
+            new FolderPickerModal(
+              this.app,
+              this.plugin.driveClient,
+              async (selectedFolder) => {
+                await this.plugin.updateSettings({
+                  rootFolderId: selectedFolder.id,
+                  rootFolderName: selectedFolder.name,
+                });
+                await this.plugin.rebuildCacheFromDrive();
+                this.display();
+              }
+            ).open();
           })
       );
 
-    // 3. Backend Adapter & Sync Controls
-    containerEl.createEl("h3", { text: "3. Virtual Adapter & Sync Settings" });
+    // 3. Advanced Settings (Collapsible Dropdown)
+    const advancedDetails = containerEl.createEl("details", {
+      attr: {
+        style:
+          "margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--background-modifier-border);",
+      },
+    });
+    advancedDetails.createEl("summary", {
+      text: "Advanced",
+      attr: {
+        style: "cursor: pointer; font-weight: 600; font-size: 1.1em; margin-bottom: 12px;",
+      },
+    });
 
-    new Setting(containerEl)
-      .setName("Enable Google Drive Vault Backend")
-      .setDesc(
-        "When enabled, replaces Obsidian's local filesystem DataAdapter with the virtual Google Drive adapter."
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.adapterEnabled).onChange(async (val) => {
-          await this.plugin.updateSettings({ adapterEnabled: val });
-          if (val) {
-            await this.plugin.connectAndMountDriveVault();
-          } else {
-            await this.plugin.unmountDriveVault();
-          }
-          this.display();
-        })
-      );
+    const advancedContainer = advancedDetails.createDiv({
+      attr: { style: "margin-top: 12px;" },
+    });
 
-    new Setting(containerEl)
+    new Setting(advancedContainer)
       .setName("Manual Sync & Cache Operations")
       .setDesc("Pull remote changes now, flush pending uploads, or force a full re-index from Drive.")
       .addButton((btn) =>
@@ -246,7 +161,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(containerEl)
+    new Setting(advancedContainer)
       .setName("Write Debounce Delay (ms)")
       .setDesc(
         "How long to wait after typing stops before uploading a modified note to Google Drive (default: 2500 ms)."
@@ -260,7 +175,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl)
+    new Setting(advancedContainer)
       .setName("Remote Change Poll Interval (seconds)")
       .setDesc("How often to check Google Drive changes.list for remote updates (default: 30s).")
       .addText((text) =>
@@ -273,7 +188,7 @@ export class GoogleDriveSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl)
+    new Setting(advancedContainer)
       .setName("Prefetch Binary Attachments for Embeds")
       .setDesc(
         "Automatically caches images/PDFs in IndexedDB so embedded ![[image.png]] links render synchronously via blob: URLs."

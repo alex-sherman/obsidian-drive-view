@@ -62,6 +62,27 @@ export class DriveClient {
   }
 
   /**
+   * Lists direct child folders of a parent folder ID (defaults to "root"), ordered alphabetically.
+   */
+  public async listFolders(parentId = "root"): Promise<DriveFileMetadata[]> {
+    const q = `mimeType = '${DRIVE_FOLDER_MIME}' and '${parentId}' in parents and trashed = false`;
+    const params = new URLSearchParams({
+      q,
+      fields: `files(${FILE_FIELDS})`,
+      pageSize: "200",
+      orderBy: "name",
+      spaces: "drive",
+    });
+
+    const res = await this.authorizedRequest({
+      url: `${DRIVE_API_BASE}/files?${params.toString()}`,
+      method: "GET",
+    });
+
+    return (res.json?.files || []) as DriveFileMetadata[];
+  }
+
+  /**
    * Lists direct children of one or more parent folder IDs.
    */
   public async listChildrenForParents(parentIds: string[]): Promise<DriveFileMetadata[]> {

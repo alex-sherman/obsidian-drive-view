@@ -9,16 +9,6 @@ export type SyncState =
 
 export interface GoogleDriveSettings {
   /**
-   * Google Cloud OAuth 2.0 Client ID.
-   * Users can use a built-in/shared public PKCE Client ID or supply their own.
-   */
-  clientId: string;
-  /**
-   * Optional Client Secret (only required by Google for "Desktop app" client types;
-   * not required for iOS/UWP PKCE client types).
-   */
-  clientSecret: string;
-  /**
    * OAuth 2.0 Access Token
    */
   accessToken: string;
@@ -61,8 +51,6 @@ export interface GoogleDriveSettings {
 }
 
 export const DEFAULT_SETTINGS: GoogleDriveSettings = {
-  clientId: "",
-  clientSecret: "",
   accessToken: "",
   refreshToken: "",
   tokenExpiresAt: 0,

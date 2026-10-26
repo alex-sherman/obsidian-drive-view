@@ -88,12 +88,12 @@ export default class GoogleDriveVaultPlugin extends Plugin {
 
     // Mount immediately from IndexedDB cache if already configured, then sync with Drive
     this.app.workspace.onLayoutReady(async () => {
-      if (this.settings.adapterEnabled && this.oauth.isAuthenticated()) {
+      if (this.oauth.isAuthenticated()) {
         await this.connectAndMountDriveVault();
       } else {
         this.setSyncState(
           "disconnected",
-          "Configure Google Drive credentials in plugin settings"
+          "Sign in to Google Drive in plugin settings"
         );
       }
     });
@@ -215,7 +215,7 @@ export default class GoogleDriveVaultPlugin extends Plugin {
 
   public restartPollingTimer(): void {
     this.stopPollingTimer();
-    if (!this.settings.adapterEnabled || !this.oauth.isAuthenticated()) return;
+    if (!this.oauth.isAuthenticated()) return;
 
     const intervalMs = Math.max(10, this.settings.pollIntervalSec || 30) * 1000;
     this.pollIntervalId = window.setInterval(() => {

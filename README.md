@@ -31,13 +31,8 @@ Copy `main.js` and `manifest.json` into your stub vault's plugin directory:
 └── manifest.json
 ```
 
-### 2. Create a Google OAuth 2.0 Client ID (One-time, Free)
-1. Open the [Google Cloud Console](https://console.cloud.google.com/), create or select a project, and enable the **Google Drive API**.
-2. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-3. Select **Desktop app** (or **iOS** for secretless PKCE) and copy your **Client ID** (and **Client Secret** if using a Desktop client).
-
-### 3. Connect on Desktop & Mobile
-- **On Desktop:** Open **Settings → Google Drive Vault Backend**, paste your Client ID, and click **Sign in with Google**. Your browser will open and automatically redirect back to Obsidian via a local loopback listener.
+### 2. Sign In & Select a Folder
+- **On Desktop:** Open **Settings → Obsidian Drive View**, click **Sign in with Google**, and then click **Browse / Create Folder...** to pick or create a Google Drive folder for your vault.
 - **On Mobile (iOS / Android):**
   - **Option A (Fastest):** Click **Copy Auth Bundle** in the Desktop plugin settings and paste it into the **Quick Cross-Device Auth Bundle** field on Mobile.
   - **Option B (Direct Mobile Sign-In):** Tap **Sign in with Google** on Mobile, approve access in your mobile browser, copy the resulting `http://127.0.0.1/?code=...` URL from your browser's address bar, and paste it into the modal.
