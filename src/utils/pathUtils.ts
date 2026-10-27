@@ -49,7 +49,7 @@ export function isConfigOrInternalPath(normalizedPath: string, configDir: string
 export function isSyncableConfigPath(
   normalizedPath: string,
   configDir: string,
-  selfPluginIds: string[] = ["drive-view", "obsidian-drive-view", "obsidian-drive-sync"]
+  selfPluginIds: string[] = ["drive-view", "obsidian-drive-view", "obsidian-drive-sync"],
 ): boolean {
   const clean = normalizeVaultPath(normalizedPath);
   const cleanConfig = normalizeVaultPath(configDir);
@@ -76,9 +76,7 @@ export function isSyncableConfigPath(
   }
 
   if (
-    selfPluginIds.some(
-      (id) => relPath === `plugins/${id}` || relPath.startsWith(`plugins/${id}/`)
-    )
+    selfPluginIds.some((id) => relPath === `plugins/${id}` || relPath.startsWith(`plugins/${id}/`))
   ) {
     return false;
   }
@@ -109,29 +107,41 @@ export function isTextFilePath(normalizedPath: string): boolean {
   return textExtensions.some((ext) => lower.endsWith(ext));
 }
 
+const mimeTypes: { [key: string]: string } = {
+  md: "text/markdown",
+  txt: "text/plain",
+  canvas: "application/json",
+  json: "application/json",
+  base: "text/yaml",
+  yaml: "text/yaml",
+  yml: "text/yaml",
+  css: "text/css",
+  js: "application/javascript",
+  ts: "application/typescript",
+  html: "text/html",
+  csv: "text/csv",
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  pdf: "application/pdf",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  mp4: "video/mp4",
+  webm: "video/webm",
+};
+
 export function guessMimeType(normalizedPath: string): string {
   const lower = normalizedPath.toLowerCase();
-  if (lower.endsWith(".md")) return "text/markdown";
-  if (lower.endsWith(".txt")) return "text/plain";
-  if (lower.endsWith(".canvas") || lower.endsWith(".json")) return "application/json";
-  if (lower.endsWith(".base") || lower.endsWith(".yaml") || lower.endsWith(".yml")) return "text/yaml";
-  if (lower.endsWith(".css")) return "text/css";
-  if (lower.endsWith(".js")) return "application/javascript";
-  if (lower.endsWith(".html")) return "text/html";
-  if (lower.endsWith(".csv")) return "text/csv";
-  if (lower.endsWith(".svg")) return "image/svg+xml";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".avif")) return "image/avif";
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".mp3")) return "audio/mpeg";
-  if (lower.endsWith(".wav")) return "audio/wav";
-  if (lower.endsWith(".ogg")) return "audio/ogg";
-  if (lower.endsWith(".m4a")) return "audio/mp4";
-  if (lower.endsWith(".mp4")) return "video/mp4";
-  if (lower.endsWith(".webm")) return "video/webm";
+  const extension = lower.split(".").at(-1)?.toLowerCase();
+  if (extension && mimeTypes[extension]) {
+    return mimeTypes[extension];
+  }
   return "application/octet-stream";
 }
 
@@ -170,7 +180,7 @@ export function isMarkdownFilePath(normalizedPath: string): boolean {
 
 function transformOutsideCodeBlocks(
   markdown: string,
-  transform: (segment: string) => string
+  transform: (segment: string) => string,
 ): string {
   // Match fenced code blocks (```...``` or ~~~...~~~) so we never alter code block contents
   const codeBlockRegex = /^(?:`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[ \t]*$/gm;
@@ -227,4 +237,3 @@ export function obsidianMarkdownToDrive(text: string): string {
     });
   });
 }
-

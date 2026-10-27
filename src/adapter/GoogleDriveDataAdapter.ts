@@ -61,13 +61,13 @@ export class GoogleDriveDataAdapter implements DataAdapter {
    * if not defined on GoogleDriveDataAdapter.
    */
   public createProxiedAdapter(): DataAdapter {
-    return new Proxy(this as unknown as DataAdapter, {
-      get(target: GoogleDriveDataAdapter, prop: string | symbol, receiver: unknown): unknown {
+    return new Proxy(this, {
+      get(target: GoogleDriveDataAdapter, prop: keyof DataAdapter, receiver: unknown): unknown {
         if (prop in target) {
           const val = Reflect.get(target, prop, receiver) as unknown;
           return typeof val === "function" ? (val as (...args: unknown[]) => unknown).bind(target) : val;
         }
-        const base = target.baseAdapter as Record<string | symbol, unknown>;
+        const base = target.baseAdapter;
         const baseVal = base[prop];
         return typeof baseVal === "function" ? (baseVal as (...args: unknown[]) => unknown).bind(base) : baseVal;
       },

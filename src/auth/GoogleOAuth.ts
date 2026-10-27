@@ -25,6 +25,12 @@ export const WORKER_REFRESH_URL = `${WORKER_BASE_URL}/refresh`;
 
 const PKCE_STORAGE_KEY = "drive_view_pkce_session";
 
+type PKCESession = {
+  codeVerifier: string;
+  state: string;
+  timestamp: number;
+};
+
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -119,7 +125,7 @@ export class GoogleOAuthManager {
     try {
       window.localStorage.setItem(
         PKCE_STORAGE_KEY,
-        JSON.stringify({ codeVerifier, state, timestamp: Date.now() })
+        JSON.stringify({ codeVerifier, state, timestamp: Date.now() } as PKCESession)
       );
     } catch {
       // Ignore if localStorage unavailable
@@ -149,7 +155,7 @@ export class GoogleOAuthManager {
     try {
       const stored = window.localStorage.getItem(PKCE_STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as PKCESession;
         if (parsed.codeVerifier) {
           codeVerifier = parsed.codeVerifier;
         }

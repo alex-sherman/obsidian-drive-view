@@ -274,7 +274,7 @@ test("GoogleDriveDataAdapter virtual filesystem & Drive sync lifecycle", async (
   expect(await proxied.read("CopiedNote.md")).toBe("Remote content\n\n\nBottom line");
   await proxied.append("CopiedNote.md", " + appended");
   expect(await proxied.read("CopiedNote.md")).toBe("Remote content\n\n\nBottom line + appended");
-  await proxied.process("CopiedNote.md", (txt) => txt.toUpperCase());
+  await proxied.process("CopiedNote.md", (txt: string) => txt.toUpperCase());
   expect(await proxied.read("CopiedNote.md")).toBe("REMOTE CONTENT\n\n\nBOTTOM LINE + APPENDED");
 
   // Flush upload of CopiedNote.md and verify extra blank lines are encoded as &nbsp; for Google Drive
