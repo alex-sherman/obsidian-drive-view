@@ -1,4 +1,4 @@
-import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type GoogleDriveVaultPlugin from "../main";
 import { FolderPickerModal } from "./FolderPickerModal";
 import { ManualOAuthModal } from "./MobileAuthModal";

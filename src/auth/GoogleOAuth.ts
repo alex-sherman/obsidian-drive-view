@@ -125,7 +125,7 @@ export class GoogleOAuthManager {
     try {
       window.localStorage.setItem(
         PKCE_STORAGE_KEY,
-        JSON.stringify({ codeVerifier, state, timestamp: Date.now() } as PKCESession)
+        JSON.stringify({ codeVerifier, state, timestamp: Date.now() })
       );
     } catch {
       // Ignore if localStorage unavailable
