@@ -1,7 +1,7 @@
 {
   "id": "drive-view",
   "name": "Drive View",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.5.0",
   "description": "Use a Google Drive folder as your vault, with a local cache for fast access on desktop and mobile.",
   "author": "Alex Sherman",
